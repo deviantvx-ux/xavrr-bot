@@ -575,4 +575,118 @@ async def msg_balance(message: Message) -> None:
         message.from_user.first_name,
     )
     await message.answer(
+        f"⭐ Ваш баланс: <b>{user['stars']} зірок</b>\n\n"
+        f"Оберіть пакет поповнення через Telegram Stars:",
+        reply_markup=topup_keyboard(),
+    )
+
+
+@router.callback_query(F.data.startswith("buy:"))
+async def cb_buy_stars(callback: CallbackQuery) -> None:
+    if not callback.data or not callback.message:
+        return
+    pack_key = callback.data.split(":", 1)[1]
+    amount = STAR_PACKS.get(pack_key)
+    if not amount:
+        await callback.answer("Пакет не знайдено", show_alert=True)
+        return
+
+    await callback.answer()
+    await callback.message.answer_invoice(
+        title=f"Пакет {amount} ⭐ — XAVRR GIFT",
+        description=f"Нарахування {amount} ігрових зірок на баланс у XAVRR GIFT.",
+        payload=f"stars:{amount}",
+        currency="XTR",
+        prices=[LabeledPrice(label=f"{amount} зірок", amount=amount)],
+    )
+
+
+@router.pre_checkout_query()
+async def on_pre_checkout(pre_checkout_query: PreCheckoutQuery) -> None:
+    await pre_checkout_query.answer(ok=True)
+
+
+@router.message(F.successful_payment)
+async def on_successful_payment(message: Message) -> None:
+    if not message.from_user or not message.successful_payment:
+        return
+    payload = message.successful_payment.invoice_payload or ""
+    if payload.startswith("stars:"):
+        try:
+            amount = int(payload.split(":", 1)[1])
+        except ValueError:
+            amount = 0
+        if amount > 0:
+            new_bal = db.add_stars(message.from_user.id, amount)
+            await message.answer(
+                f"✅ Оплата пройшла успішно! Нараховано <b>+{amount} ⭐</b>.\n"
+                f"Новий баланс: <b>{new_bal} ⭐</b>"
+            )
+
+
+@router.message(F.text == "👥 Реферали та Промо")
+async def msg_referrals_promo(message: Message, bot: Bot) -> None:
+    if not message.from_user:
+        return
+    bot_me = await bot.get_me()
+    ref_link = f"https://t.me/{bot_me.username}?start=ref_{message.from_user.id}"
+    refs_count = db.count_referrals(message.from_user.id)
+    await message.answer(
+        f"👥 Запрошено друзів: <b>{refs_count}</b> (+200 ⭐ за кожного)\n"
+        f"🔗 Ваше посилання:\n<code>{ref_link}</code>\n\n"
+        f"🎟 Щоб активувати промокод (наприклад, <code>XAVRR</code>), просто надішліть його повідомленням у чат!",
+    )
+
+
+@router.message(F.text)
+async def on_promo_or_text(message: Message) -> None:
+    if not message.from_user or not message.text:
+        return
+    text = message.text.strip()
+    if text.upper() in PROMO_CODES:
+        res = db.apply_promo(message.from_user.id, text)
+        if res == -1:
+            await message.answer("⚠️ Ви вже використовували цей промокод.")
+        elif res:
+            bal = db.get_user(message.from_user.id)["stars"]
+            await message.answer(
+                f"🎉 Промокод <b>{text.upper()}</b> активовано! Отримано <b>+{res} ⭐</b>.\n"
+                f"Баланс: <b>{bal} ⭐</b>"
+            )
+        return
+
+    await message.answer(
+        "Оберіть дію на клавіатурі нижче:",
+        reply_markup=main_reply_keyboard(),
+    )
+
+
+async def start_health_server() -> None:
+    async def health(request: web.Request) -> web.Response:
+        return web.Response(text="OK")
+
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+    await site.start()
+    logger.info("HTTP health server запущено на порту %s", PORT)
+
+
+async def main() -> None:
+    await start_health_server()
+    bot = Bot(
+        token=BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    dp = Dispatcher()
+    dp.include_router(router)
+    logger.info("Запуск XAVRR GIFT бота...")
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
     
