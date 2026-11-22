@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(file))
 START_CREDITS = 1000 if DEMO else 0
 SELL_RATE = 0.9          # sell-back share of item value
 UPGRADE_EDGE = 0.95      # upgrade chance multiplier (house edge 5%)
-key: (name, emoji, value in credits). 1 Telegram Star = 1 credit.
+#key: (name, emoji, value in credits). 1 Telegram Star = 1 credit.
 ITEMS = {
 "heart": ("Heart", "💝", 50), "bear": ("Teddy Bear", "🧸", 50),
 "rose": ("Rose", "🌹", 100), "cake": ("Cake", "🎂", 100),
