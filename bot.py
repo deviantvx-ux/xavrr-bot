@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -31,6 +32,7 @@ ADMIN_IDS = {
     if x.strip().isdigit()
 }
 DB_PATH = os.getenv("DB_PATH", "xavrr_gift.db").strip()
+PORT = int(os.getenv("PORT", "10000").strip())
 
 if not BOT_TOKEN:
     raise RuntimeError("Вкажи BOT_TOKEN у змінних середовища або у файлі .env")
@@ -573,5 +575,4 @@ async def msg_balance(message: Message) -> None:
         message.from_user.first_name,
     )
     await message.answer(
-        f"⭐ Ваш баланс: <b>{user['stars']} зірок</b>\n\n"
-        f"Оберіть
+    
