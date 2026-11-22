@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XAVRR GIFT — Telegram Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: #07070b;
+      --card: #111118;
+      --card-2: #181824;
+      --text: #f5f5fa;
+      --muted: #9898b0;
+      --accent: #eab308;
+      --ok: #22c55e;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; font-family: Inter, system-ui, -apple-system, sans-serif; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #18142b 0%, var(--bg) 55%);
+      color: var(--text);
+      padding-bottom: 84px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(7, 7, 11, 0.88);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+    }
+    .brand { font-weight: 800; letter-spacing: 0.08em; font-size: 1.05rem; }
+    .brand span { color: var(--accent); }
+    .balance {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+    main { padding: 16px; max-width: 540px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .case-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .case-emoji { font-size: 2rem; }
+    .case-title { font-weight: 700; font-size: 0.98rem; }
+    .btn {
+      background: linear-gradient(135deg, var(--accent), #f97316);
+      color: #09090b;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 800;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn-ghost {
+      background: var(--card-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 14px;
+    }
+    .roulette-box {
+      background: var(--card-2);
+      border: 1px solid var(--accent);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      margin: 12px 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+    .inv-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .inv-actions { display: flex; gap: 6px; }
+    .inv-actions button { padding: 6px 10px; font-size: 0.8rem; width: auto; }
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(12, 12, 18, 0.95);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      padding: 8px 6px;
+    }
+    nav button {
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      font-weight: 700;
+      padding: 8px;
+      cursor: pointer;
+    }
+    nav button.active { color: var(--accent); }
+    .hidden { display: none; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">XAVRR <span>GIFT</span></div>
+    <div class="balance" id="balance">⭐ 1000</div>
+  </header>
+
+  <main>
+    <section id="tab-cases">
+      <div class="grid" id="cases-list"></div>
+      <div class="panel hidden" id="roulette-panel">
+        <div id="roulette-case-title" style="font-weight:800;"></div>
+        <div class="roulette-box" id="roulette-result">Оберіть кейс для запуску</div>
+        <button class="btn" id="spin-btn">Крутити кейс</button>
+      </div>
+    </section>
+
+    <section id="tab-inv" class="hidden">
+      <div class="panel">
+        <div style="font-weight:800; margin-bottom:8px;">Інвентар призів</div>
+        <div id="inv-list">Поки порожньо</div>
+      </div>
+    </section>
+
+    <section id="tab-bonus" class="hidden">
+      <div class="panel">
+        <div style="font-weight:800; margin-bottom:8px;">Промокод та Демо-поповнення</div>
+        <input id="promo-input" placeholder="Введіть промокод (наприклад: XAVRR)" />
+        <button class="btn" id="promo-btn">Активувати промокод (+500 ⭐)</button>
+        <div style="height:10px;"></div>
+        <button class="btn btn-ghost" id="demo-topup-btn">Тестове поповнення (+500 ⭐)</button>
+        <div id="bonus-msg" style="margin-top:10px; color:var(--ok); font-size:0.9rem;"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <button class="active" data-tab="cases">🎁 Кейси</button>
+    <button data-tab="inv">🎒 Інвентар</button>
+    <button data-tab="bonus">🎟 Бонуси</button>
+  </nav>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const state = {
+      balance: 1000,
+      selectedCase: null,
+      inventory: [],
+      usedPromo: false
+    };
+
+    const CASES = [
+      { id: "bronze", name: "Бронзовий Старт", price: 100, emoji: "🥉", drops: [
+        { name: "Зоряний Пил", value: 45, emoji: "✨" },
+        { name: "Корона Коваля", value: 110, emoji: "👑" },
+        { name: "Маска Дубая", value: 360, emoji: "🥷" }
+      ]},
+      { id: "king", name: "Темний Король XAVRR", price: 250, emoji: "👑", drops: [
+        { name: "Обсидіановий Перстень", value: 120, emoji: "💍" },
+        { name: "Меч Чорного Короля", value: 480, emoji: "⚔️" },
+        { name: "Трон XAVRR NFT", value: 950, emoji: "🖤" }
+      ]},
+      { id: "ninja", name: "Дубай Ніндзя", price: 500, emoji: "🥷", drops: [
+        { name: "Неоновий Сюрикен", value: 300, emoji: "💠" },
+        { name: "Золотий Катана-Сет", value: 980, emoji: "⛩️" },
+        { name: "Хромований Фантом", value: 1850, emoji: "🕶️" }
+      ]},
+      { id: "mythic", name: "Легендарний NFT", price: 1000, emoji: "💎", drops: [
+        { name: "Скіпетр Імператора", value: 1250, emoji: "🏆" },
+        { name: "Дракон Безодні", value: 2200, emoji: "🐉" },
+        { name: "Корона Безсмертного", value: 3900, emoji: "💎" }
+      ]}
+    ];
+
+    function renderBalance() {
+      document.getElementById("balance").textContent = `⭐ ${state.balance}`;
+    }
+
+    function renderCases() {
+      const box = document.getElementById("cases-list");
+      box.innerHTML = "";
+      CASES.forEach(c => {
+        const el = document.createElement("div");
+        el.className = "case-card";
+        el.innerHTML = `
+          <div>
+            <div class="case-emoji">${c.emoji}</div>
+            <div class="case-title">${c.name}</div>
+          </div>
+          <button class="btn">Відкрити • ${c.price} ⭐</button>
+        `;
+        el.querySelector("button").onclick = () => {
+          state.selectedCase = c;
+          document.getElementById("roulette-panel").classList.remove("hidden");
+          document.getElementById("roulette-case-title").textContent = `${c.emoji} ${c.name} (${c.price} ⭐)`;
+          document.getElementById("roulette-result").textContent = `Натисніть «Крутити кейс»`;
+        };
+        box.appendChild(el);
+      });
+    }
+
+    document.getElementById("spin-btn").onclick = () => {
+      const c = state.selectedCase;
+      if (!c) return;
+      if (state.balance < c.price) {
+        alert("Недостатньо зірок!");
+        return;
+      }
+      state.balance -= c.price;
+      renderBalance();
+      const won = c.drops[Math.floor(Math.random() * c.drops.length)];
+      document.getElementById("roulette-result").textContent = `${won.emoji} ${won.name} (+${won.value} ⭐)`;
+      state.inventory.unshift({ id: Date.now() + Math.random(), ...won });
+      renderInventory();
+    };
+
+    function renderInventory() {
+      const box = document.getElementById("inv-list");
+      if (!state.inventory.length) {
+        box.textContent = "Поки порожньо";
+        return;
+      }
+      box.innerHTML = "";
+      state.inventory.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "inv-item";
+        row.innerHTML = `
+          <div>${item.emoji} <b>${item.name}</b> <small>(${item.value} ⭐)</small></div>
+          <div class="inv-actions">
+            <button class="btn sell-btn">Продати</button>
+            <button class="btn btn-ghost wd-btn">Вивід</button>
+          </div>
+        `;
+        row.querySelector(".sell-btn").onclick = () => {
+          state.balance += item.value;
+          state.inventory = state.inventory.filter(x => x.id !== item.id);
+          renderBalance();
+          renderInventory();
+        };
+        row.querySelector(".wd-btn").onclick = () => {
+          if (tg) {
+            tg.sendData(JSON.stringify({ action: "withdraw", item_name: item.name, value: item.value }));
+          }
+          alert(`Запит на вивід «${item.name}» сформовано!`);
+        };
+        box.appendChild(row);
+      });
+    }
+
+    document.getElementById("promo-btn").onclick = () => {
+      const code = document.getElementById("promo-input").value.trim().toUpperCase();
+      if (code === "XAVRR" && !state.usedPromo) {
+        state.usedPromo = true;
+        state.balance += 500;
+        renderBalance();
+        document.getElementById("bonus-msg").textContent = "Промокод XAVRR активовано: +500 ⭐!";
+      } else {
+        document.getElementById("bonus-msg").textContent = "Невірний код або вже активовано.";
+      }
+    };
+
+    document.getElementById("demo-topup-btn").onclick = () => {
+      state.balance += 500;
+      renderBalance();
+      document.getElementById("bonus-msg").textContent = "Додано +500 ⭐ (демо).";
+    };
+
+    document.querySelectorAll("nav button").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const tab = btn.dataset.tab;
+        ["cases", "inv", "bonus"].forEach(t => {
+          document.getElementById(`tab-${t}`).classList.toggle("hidden", t !== tab);
+        });
+      };
+    });
+
+    renderBalance();
+    renderCases();
+    renderInventory();
+  </script>
+</body>
+</html>
