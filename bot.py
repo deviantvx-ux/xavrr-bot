@@ -1,9 +1,11 @@
 import asyncio
+import json
 import logging
 import os
 import random
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from aiohttp import web
@@ -20,12 +22,16 @@ from aiogram.types import (
     Message,
     PreCheckoutQuery,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+WEBAPP_URL = os.getenv(
+    "WEBAPP_URL", "https://xavrr-bot.onrender.com/webapp/index.html"
+).strip()
 ADMIN_IDS = {
     int(x.strip())
     for x in os.getenv("ADMIN_IDS", "").split(",")
@@ -44,48 +50,76 @@ logging.basicConfig(
 logger = logging.getLogger("xavrr_gift_bot")
 
 CASES: Dict[str, Dict[str, Any]] = {
-    "bronze": {
-        "id": "bronze",
-        "title": "Бронзовий Старт",
+    "farm": {
+        "id": "farm",
+        "tag": "ФАРМ",
+        "emoji": "🌾",
+        "title": "Фарм Кейс",
+        "price": 50,
+        "items": [
+            {"name": "B-Day Candle", "rarity": "common", "value": 25, "chance": 50, "emoji": "🕯️"},
+            {"name": "Santa Hat", "rarity": "common", "value": 45, "chance": 35, "emoji": "🎅"},
+            {"name": "Homemade Cake", "rarity": "rare", "value": 85, "chance": 15, "emoji": "🎂"},
+        ],
+    },
+    "small": {
+        "id": "small",
+        "tag": "МЄЛОЧ",
+        "emoji": "🪙",
+        "title": "Мєлоч Кейс",
         "price": 100,
         "items": [
-            {"name": "Зоряний Пил", "rarity": "common", "value": 45, "chance": 42, "emoji": "✨"},
-            {"name": "Корона Коваля", "rarity": "rare", "value": 110, "chance": 30, "emoji": "👑"},
-            {"name": "Клинок Тіні", "rarity": "epic", "value": 190, "chance": 18, "emoji": "🗡️"},
-            {"name": "Маска Дубая", "rarity": "legendary", "value": 360, "chance": 10, "emoji": "🥷"},
+            {"name": "Homemade Cake", "rarity": "common", "value": 70, "chance": 48, "emoji": "🎂"},
+            {"name": "Ice Cream", "rarity": "rare", "value": 120, "chance": 34, "emoji": "🍨"},
+            {"name": "Loot Bag", "rarity": "epic", "value": 210, "chance": 18, "emoji": "🎒"},
         ],
     },
-    "dark_king": {
-        "id": "dark_king",
-        "title": "Темний Король XAVRR",
+    "rare": {
+        "id": "rare",
+        "tag": "РІДКІСНІ",
+        "emoji": "💠",
+        "title": "Рідкісні NFT",
         "price": 250,
         "items": [
-            {"name": "Обсидіановий Перстень", "rarity": "common", "value": 120, "chance": 35, "emoji": "💍"},
-            {"name": "Плащ Повелителя", "rarity": "rare", "value": 240, "chance": 32, "emoji": "🦇"},
-            {"name": "Меч Чорного Короля", "rarity": "epic", "value": 480, "chance": 22, "emoji": "⚔️"},
-            {"name": "Трон XAVRR NFT", "rarity": "mythic", "value": 950, "chance": 11, "emoji": "🖤"},
+            {"name": "Victory Medal", "rarity": "rare", "value": 180, "chance": 45, "emoji": "🏅"},
+            {"name": "Scared Cat", "rarity": "epic", "value": 390, "chance": 35, "emoji": "🐱"},
+            {"name": "Artisan Brick", "rarity": "legendary", "value": 640, "chance": 20, "emoji": "🧱"},
         ],
     },
-    "dubai_ninja": {
-        "id": "dubai_ninja",
-        "title": "Дубай Ніндзя",
+    "dubai": {
+        "id": "dubai",
+        "tag": "ДУБАЙ",
+        "emoji": "🏙️",
+        "title": "Дубай",
         "price": 500,
         "items": [
-            {"name": "Неоновий Сюрикен", "rarity": "rare", "value": 300, "chance": 36, "emoji": "💠"},
-            {"name": "Пустельний Сокіл", "rarity": "epic", "value": 560, "chance": 30, "emoji": "🦅"},
-            {"name": "Золотий Катана-Сет", "rarity": "legendary", "value": 980, "chance": 22, "emoji": "⛩️"},
-            {"name": "Хромований Фантом", "rarity": "mythic", "value": 1850, "chance": 12, "emoji": "🕶️"},
+            {"name": "Artisan Brick", "rarity": "rare", "value": 420, "chance": 45, "emoji": "🧱"},
+            {"name": "Precious Peach", "rarity": "epic", "value": 780, "chance": 35, "emoji": "🍑"},
+            {"name": "Durov's Cap", "rarity": "mythic", "value": 1450, "chance": 20, "emoji": "🧢"},
         ],
     },
-    "mythic_nft": {
-        "id": "mythic_nft",
-        "title": "Легендарний NFT",
+    "premium": {
+        "id": "premium",
+        "tag": "ПРЕМІУМ",
+        "emoji": "👑",
+        "title": "Преміум Кейс",
         "price": 1000,
         "items": [
-            {"name": "Священний Амулет", "rarity": "epic", "value": 650, "chance": 34, "emoji": "🔮"},
-            {"name": "Скіпетр Імператора", "rarity": "legendary", "value": 1250, "chance": 32, "emoji": "🏆"},
-            {"name": "Дракон Безодні", "rarity": "mythic", "value": 2200, "chance": 22, "emoji": "🐉"},
-            {"name": "Корона Безсмертного", "rarity": "mythic", "value": 3900, "chance": 12, "emoji": "💎"},
+            {"name": "Heroic Helmet", "rarity": "epic", "value": 850, "chance": 45, "emoji": "⛑️"},
+            {"name": "Astral Shard", "rarity": "legendary", "value": 1500, "chance": 35, "emoji": "🔮"},
+            {"name": "Resistance Dog", "rarity": "mythic", "value": 2600, "chance": 20, "emoji": "🐕"},
+        ],
+    },
+    "vip": {
+        "id": "vip",
+        "tag": "VIP",
+        "emoji": "💎",
+        "title": "VIP Кейс",
+        "price": 2500,
+        "items": [
+            {"name": "Durov's Cap", "rarity": "legendary", "value": 2100, "chance": 48, "emoji": "🧢"},
+            {"name": "Heart Locket", "rarity": "mythic", "value": 3800, "chance": 34, "emoji": "💖"},
+            {"name": "Plush Pepe", "rarity": "mythic", "value": 7500, "chance": 18, "emoji": "🐸"},
         ],
     },
 }
@@ -332,6 +366,12 @@ router = Router()
 def main_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [
+                KeyboardButton(
+                    text="👑 Відкрити XAVRR GIFT",
+                    web_app=WebAppInfo(url=WEBAPP_URL),
+                )
+            ],
             [KeyboardButton(text="🎁 Кейси"), KeyboardButton(text="🎒 Інвентар")],
             [
                 KeyboardButton(text="⭐ Баланс / Поповнити"),
@@ -343,20 +383,24 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 def cases_keyboard() -> InlineKeyboardMarkup:
+    order = ["farm", "small", "rare", "dubai", "premium", "vip"]
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{emoji} {CASES[cid]['title']} — {CASES[cid]['price']} ⭐",
+                text=f"[{CASES[cid]['tag']}] {CASES[cid]['emoji']} {CASES[cid]['title']} — {CASES[cid]['price']} ⭐",
                 callback_data=f"case:{cid}",
             )
         ]
-        for cid, emoji in [
-            ("bronze", "🥉"),
-            ("dark_king", "👑"),
-            ("dubai_ninja", "🥷"),
-            ("mythic_nft", "💎"),
-        ]
+        for cid in order
     ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🚀 Відкрити в Mini App",
+                web_app=WebAppInfo(url=WEBAPP_URL),
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -367,7 +411,13 @@ def topup_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="+100 ⭐", callback_data="buy:pack_100"),
                 InlineKeyboardButton(text="+500 ⭐", callback_data="buy:pack_500"),
                 InlineKeyboardButton(text="+1500 ⭐", callback_data="buy:pack_1500"),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📱 Поповнити у Mini App",
+                    web_app=WebAppInfo(url=WEBAPP_URL),
+                )
+            ],
         ]
     )
 
@@ -405,7 +455,7 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     ref_link = f"https://t.me/{bot_me.username}?start=ref_{message.from_user.id}"
 
     await message.answer(
-        f"👑 <b>XAVRR GIFT</b> — арена кейсів та подарунків у Telegram.\n\n"
+        f"👑 <b>XAVRR GIFT</b> — кейси та колекційні подарунки / NFT у Telegram.\n\n"
         f"Вітаємо, <b>{message.from_user.first_name or 'Гравець'}</b>!\n"
         f"⭐ Баланс: <b>{user['stars']} зірок</b>\n"
         f"🎟 Промокод на старт: <code>XAVRR</code> (+500 ⭐)\n"
@@ -417,7 +467,7 @@ async def cmd_start(message: Message, bot: Bot) -> None:
 @router.message(F.text == "🎁 Кейси")
 async def msg_cases(message: Message) -> None:
     await message.answer(
-        "🎁 <b>Обери кейс для відкриття:</b>",
+        "🎁 <b>Обери кейс (Фарм, Мєлоч, Рідкісні, Дубай, Преміум, VIP) або запусти Mini App:</b>",
         reply_markup=cases_keyboard(),
     )
 
@@ -472,7 +522,7 @@ async def cb_open_case(callback: CallbackQuery) -> None:
 
     await callback.answer("Кейс відкрито!")
     await callback.message.answer(
-        f"{won['emoji']} Ви відкрили <b>{case['title']}</b>!\n"
+        f"{won['emoji']} Ви відкрили <b>[{case['tag']}] {case['title']}</b>!\n"
         f"Випало: <b>{won['name']}</b> (цінність: <b>{won['value']} ⭐</b>)\n"
         f"Залишок балансу: <b>{new_balance} ⭐</b>",
         reply_markup=kb,
@@ -638,6 +688,34 @@ async def msg_referrals_promo(message: Message, bot: Bot) -> None:
     )
 
 
+@router.message(F.web_app_data)
+async def on_webapp_data(message: Message) -> None:
+    if not message.from_user or not message.web_app_data:
+        return
+    raw = message.web_app_data.data
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = {"raw": raw}
+
+    action = data.get("action")
+    if action == "withdraw":
+        item_name = str(data.get("item_name", "NFT Приз"))
+        value = int(data.get("value", 0))
+        tg_nick = (
+            f"@{message.from_user.username}"
+            if message.from_user.username
+            else f"id:{message.from_user.id}"
+        )
+        await message.answer(
+            f"📤 Отримано запит із Mini App на вивід <b>{item_name}</b> ({value} ⭐) для <b>{tg_nick}</b>."
+        )
+    else:
+        await message.answer(
+            f"📲 Дані з Mini App синхронізовано: <code>{raw[:300]}</code>"
+        )
+
+
 @router.message(F.text)
 async def on_promo_or_text(message: Message) -> None:
     if not message.from_user or not message.text:
@@ -656,7 +734,7 @@ async def on_promo_or_text(message: Message) -> None:
         return
 
     await message.answer(
-        "Оберіть дію на клавіатурі нижче:",
+        "Оберіть дію на клавіатурі нижче або відкрийте <b>XAVRR GIFT</b>:",
         reply_markup=main_reply_keyboard(),
     )
 
@@ -668,11 +746,16 @@ async def start_health_server() -> None:
     app = web.Application()
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
+
+    webapp_dir = Path(__file__).resolve().parent / "webapp"
+    if webapp_dir.is_dir():
+        app.router.add_static("/webapp/", path=str(webapp_dir), name="webapp")
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
     await site.start()
-    logger.info("HTTP health server запущено на порту %s", PORT)
+    logger.info("HTTP сервер запущено на порту %s", PORT)
 
 
 async def main() -> None:
@@ -689,4 +772,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
